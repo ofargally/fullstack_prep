@@ -2,6 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Body  # 
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
+
 from models import (
     Chat,
     MessageInChat,
@@ -13,8 +14,6 @@ from models import (
 from database import get_mongo_db
 from config import settings
 from typing import List
-import datetime
-import uuid
 
 app = FastAPI(title="Chat API")
 
@@ -26,7 +25,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Constants ---
 CHAT_DOCUMENT_ID = "main_chat"  # id for a single chat document
 
 
@@ -44,10 +42,8 @@ async def read_root():
 async def get_chat_messages(db: AsyncIOMotorClient = Depends(get_mongo_db)):
     chat_doc = await db["chats"].find_one({"_id": CHAT_DOCUMENT_ID})
     if chat_doc:
-        # Return the messages array, default to empty list if 'messages' field doesn't exist
         return chat_doc.get("messages", [])
     else:
-        # If the chat document doesn't exist yet, return an empty list
         return []
 
 
@@ -60,13 +56,11 @@ async def post_new_message(
     payload: MessageCreatePayload = Body(...),  # Use payload model
     db: AsyncIOMotorClient = Depends(get_mongo_db)
 ):
-    # 1. Validate user exists
     user = await db["users"].find_one({"_id": payload.user_name})
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"User '{payload.user_name}' not found")
 
-    # 2. Create the message object
     new_message = MessageInChat(
         user_id=payload.user_name,
         message=payload.message_text
@@ -117,12 +111,22 @@ async def post_user(
                             detail="Failed to retrieve user after creation.")
 
 
-@app.get("/users/",
-         response_model=List[UserResponse],
-         summary="Get all users",
-         tags=["Users"])
-async def get_users(db: AsyncIOMotorClient = Depends(get_mongo_db)):
-    users_cursor = db["users"].find()
-    users_list = await users_cursor.to_list(length=None)  # Get all users
-    # Convert MongoDB docs to UserResponse models
-    return [UserResponse(**user) for user in users_list]
+@app.post("/chat/reinitialize/",
+          response_model=Chat,
+          status_code=status.HTTP_200_OK,
+          summary="Reinitialize chat document",
+          tags=["Chat"])
+async def reinitialize_chat(
+    db: AsyncIOMotorClient = Depends(get_mongo_db)
+):
+    new_chat_doc = Chat(id=CHAT_DOCUMENT_ID, messages=[])
+    result = await db["chats"].replace_one(
+        {"_id": CHAT_DOCUMENT_ID},
+        new_chat_doc.model_dump(by_alias=True),
+        upsert=True
+    )
+    if result:
+        return new_chat_doc
+    else:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail="Failed to reinitialize chat document")
