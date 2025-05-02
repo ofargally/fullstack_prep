@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     @property
     def MONGODB_URL(self):
-        mongodb_url = f"mongodb+srv://{self.MONGODB_USERNAME}:{self.MONGODB_PASSWORD}@{self.MONGODB_CLUSTER}/?tlsAllowInvalidCertificates=true"
+        mongodb_url = f"mongodb+srv://{self.MONGODB_USERNAME}:{self.MONGODB_PASSWORD}@{self.MONGODB_CLUSTER}/
         print(f"MongoDB URL: {mongodb_url}")  # Debugging line
         return mongodb_url
 
